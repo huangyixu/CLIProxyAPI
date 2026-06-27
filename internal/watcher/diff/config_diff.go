@@ -109,6 +109,20 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 	if oldCfg.Routing.Strategy != newCfg.Routing.Strategy {
 		changes = append(changes, fmt.Sprintf("routing.strategy: %s -> %s", oldCfg.Routing.Strategy, newCfg.Routing.Strategy))
 	}
+	if oldCfg.Routing.KeyAuth.Enabled != newCfg.Routing.KeyAuth.Enabled {
+		changes = append(changes, fmt.Sprintf("routing.key-auth.enabled: %t -> %t", oldCfg.Routing.KeyAuth.Enabled, newCfg.Routing.KeyAuth.Enabled))
+	}
+	if strings.TrimSpace(oldCfg.Routing.KeyAuth.DefaultPolicy) != strings.TrimSpace(newCfg.Routing.KeyAuth.DefaultPolicy) {
+		changes = append(changes, fmt.Sprintf("routing.key-auth.default-policy: %s -> %s", strings.TrimSpace(oldCfg.Routing.KeyAuth.DefaultPolicy), strings.TrimSpace(newCfg.Routing.KeyAuth.DefaultPolicy)))
+	}
+	oldKeyHeaders := trimStrings(oldCfg.Routing.KeyAuth.KeyHeaders)
+	newKeyHeaders := trimStrings(newCfg.Routing.KeyAuth.KeyHeaders)
+	if !reflect.DeepEqual(oldKeyHeaders, newKeyHeaders) {
+		changes = append(changes, fmt.Sprintf("routing.key-auth.key-headers: updated (%d -> %d entries)", len(oldKeyHeaders), len(newKeyHeaders)))
+	}
+	if !keyAuthBindingsEqual(oldCfg.Routing.KeyAuth.Bindings, newCfg.Routing.KeyAuth.Bindings) {
+		changes = append(changes, fmt.Sprintf("routing.key-auth.bindings: updated (count %d -> %d)", len(oldCfg.Routing.KeyAuth.Bindings), len(newCfg.Routing.KeyAuth.Bindings)))
+	}
 	if !reflect.DeepEqual(oldCfg.Payload, newCfg.Payload) {
 		changes = appendPayloadConfigChanges(changes, oldCfg.Payload, newCfg.Payload)
 	}
@@ -325,6 +339,22 @@ func trimStrings(in []string) []string {
 		out[i] = strings.TrimSpace(in[i])
 	}
 	return out
+}
+
+func keyAuthBindingsEqual(a, b map[string]config.KeyAuthBinding) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for clientKey, aBinding := range a {
+		bBinding, ok := b[clientKey]
+		if !ok {
+			return false
+		}
+		if !reflect.DeepEqual(trimStrings(aBinding.AuthIDs), trimStrings(bBinding.AuthIDs)) {
+			return false
+		}
+	}
+	return true
 }
 
 func appendPayloadConfigChanges(changes []string, oldPayload, newPayload config.PayloadConfig) []string {

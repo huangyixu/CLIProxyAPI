@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
@@ -90,6 +91,45 @@ func TestBuildConfigChangeDetails_NoChanges(t *testing.T) {
 	}
 	if details := BuildConfigChangeDetails(cfg, cfg); len(details) != 0 {
 		t.Fatalf("expected no change entries, got %v", details)
+	}
+}
+
+func TestBuildConfigChangeDetails_KeyAuthRedactsBindings(t *testing.T) {
+	oldCfg := &config.Config{
+		Routing: config.RoutingConfig{
+			KeyAuth: config.KeyAuthRoutingConfig{
+				Enabled:       false,
+				DefaultPolicy: "delegate",
+				KeyHeaders:    []string{"Authorization"},
+				Bindings: map[string]config.KeyAuthBinding{
+					"sk-old-secret": {AuthIDs: []string{"auth-a"}},
+				},
+			},
+		},
+	}
+	newCfg := &config.Config{
+		Routing: config.RoutingConfig{
+			KeyAuth: config.KeyAuthRoutingConfig{
+				Enabled:       true,
+				DefaultPolicy: "deny",
+				KeyHeaders:    []string{"Authorization", "X-Api-Key"},
+				Bindings: map[string]config.KeyAuthBinding{
+					"sk-new-secret": {AuthIDs: []string{"auth-a", "auth-b"}},
+					"sk-extra":      {AuthIDs: []string{"auth-c"}},
+				},
+			},
+		},
+	}
+
+	changes := BuildConfigChangeDetails(oldCfg, newCfg)
+	expectContains(t, changes, "routing.key-auth.enabled: false -> true")
+	expectContains(t, changes, "routing.key-auth.default-policy: delegate -> deny")
+	expectContains(t, changes, "routing.key-auth.key-headers: updated (1 -> 2 entries)")
+	expectContains(t, changes, "routing.key-auth.bindings: updated (count 1 -> 2)")
+	for _, change := range changes {
+		if strings.Contains(change, "sk-old-secret") || strings.Contains(change, "sk-new-secret") || strings.Contains(change, "sk-extra") {
+			t.Fatalf("key-auth diff leaked client key in %q", change)
+		}
 	}
 }
 

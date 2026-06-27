@@ -4296,6 +4296,10 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		return auth, exec, err
 	}
 
+	scope := m.keyAuthScope(opts)
+	if err := scope.Err(); err != nil {
+		return nil, nil, err
+	}
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
 	disallowFreeAuth := disallowFreeAuthFromMetadata(opts.Metadata)
 
@@ -4333,10 +4337,16 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		if modelKey != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
+		if !scope.Allow(candidate.ID) {
+			continue
+		}
 		candidates = append(candidates, candidate)
 	}
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
+		if scope.Scoped() {
+			return nil, nil, &Error{Code: "auth_not_found", Message: "no auth available for client key"}
+		}
 		return nil, nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 	}
 	available, errAvailable := m.availableAuthsForRouteModel(candidates, provider, model, time.Now())
@@ -4379,6 +4389,9 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 	}
 
 	if m.hasPluginScheduler() || !m.useSchedulerFastPath() {
+		return m.pickNextLegacy(ctx, provider, model, opts, tried)
+	}
+	if m.keyAuthScope(opts).Active() {
 		return m.pickNextLegacy(ctx, provider, model, opts, tried)
 	}
 	if strings.TrimSpace(model) != "" {
@@ -4439,6 +4452,10 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		return m.pickNextViaHome(ctx, model, opts, tried)
 	}
 
+	scope := m.keyAuthScope(opts)
+	if err := scope.Err(); err != nil {
+		return nil, nil, "", err
+	}
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
 	disallowFreeAuth := disallowFreeAuthFromMetadata(opts.Metadata)
 
@@ -4493,10 +4510,16 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		if modelKey != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
+		if !scope.Allow(candidate.ID) {
+			continue
+		}
 		candidates = append(candidates, candidate)
 	}
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
+		if scope.Scoped() {
+			return nil, nil, "", &Error{Code: "auth_not_found", Message: "no auth available for client key"}
+		}
 		return nil, nil, "", &Error{Code: "auth_not_found", Message: "no auth available"}
 	}
 	available, errAvailable := m.availableAuthsForRouteModel(candidates, "mixed", model, time.Now())
@@ -4543,6 +4566,9 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 	}
 
 	if m.hasPluginScheduler() || !m.useSchedulerFastPath() {
+		return m.pickNextMixedLegacy(ctx, providers, model, opts, tried)
+	}
+	if m.keyAuthScope(opts).Active() {
 		return m.pickNextMixedLegacy(ctx, providers, model, opts, tried)
 	}
 

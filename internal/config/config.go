@@ -341,6 +341,26 @@ type RoutingConfig struct {
 	// SessionAffinityTTL specifies how long session-to-auth bindings are retained.
 	// Default: 1h. Accepts duration strings like "30m", "1h", "2h30m".
 	SessionAffinityTTL string `yaml:"session-affinity-ttl,omitempty" json:"session-affinity-ttl,omitempty"`
+
+	// KeyAuth limits upstream auth selection by the client key used to call CPA.
+	KeyAuth KeyAuthRoutingConfig `yaml:"key-auth,omitempty" json:"key-auth,omitempty"`
+}
+
+// KeyAuthRoutingConfig configures request key aware auth selection scopes.
+type KeyAuthRoutingConfig struct {
+	// Enabled toggles key-aware auth scoping.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// DefaultPolicy controls unbound keys. Supported values: "delegate" (default), "deny".
+	DefaultPolicy string `yaml:"default-policy,omitempty" json:"default-policy,omitempty"`
+	// KeyHeaders lists inbound headers checked for the client key, in priority order.
+	KeyHeaders []string `yaml:"key-headers,omitempty" json:"key-headers,omitempty"`
+	// Bindings maps a client key to the upstream auth IDs allowed for that key.
+	Bindings map[string]KeyAuthBinding `yaml:"bindings,omitempty" json:"bindings,omitempty"`
+}
+
+// KeyAuthBinding stores the auth IDs allowed for one client key.
+type KeyAuthBinding struct {
+	AuthIDs []string `yaml:"auth-ids,omitempty" json:"auth-ids,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
